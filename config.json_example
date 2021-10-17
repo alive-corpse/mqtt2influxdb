@@ -1,0 +1,33 @@
+{
+    "MQTT": {
+        "host": "localhost",
+        "port": 1883,
+        "user": "someusername",
+        "pass": "somepassword",
+        "subs": "zigbee2mqtt/#"
+    },
+    "InfluxDB": {"url": "http://somehost:8086/write?db=somebase"},
+    "Templates": {
+        "temperature": "Temperature,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
+        "humidity": "Humidity,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
+        "pressure": "Pressure,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
+        "occupancy": "Occupancy,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
+        "battery": "Battery,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
+        "voltage": "Voltage,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
+        "linkquality": "LinkQuality,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%"
+    },
+    "Metrics": {
+        "^zigbee2mqtt/.*_temp_hum$": {
+            "values": ["battery", "humidity", "linkquality", "temperature", "voltage"],
+            "tags": [{"name": "room", "mask": "^zigbee2mqtt/([a-z_]*)_temp_hum$"}]
+        },
+        "^zigbee2mqtt/.*_temp_hum_bar$": {
+            "values": ["battery", "humidity", "pressure", "linkquality", "temperature", "voltage"],
+            "tags": [{"name": "room", "mask": "^zigbee2mqtt/([a-z_]*)_temp_hum_bar$"}]
+        },
+        "^zigbee2mqtt/.*_movement$": {
+            "values": ["battery", "occupancy", "linkquality", "voltage"],
+            "tags": [{"name": "room", "mask": "^zigbee2mqtt/([a-z_]*)_movement$"}]
+        }
+    }
+}

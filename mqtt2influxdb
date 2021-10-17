@@ -1,0 +1,64 @@
+#!/bin/sh
+# Small script for sending metrics from MQTT to InfluxDB
+# Made by Evgeniy Shumilov <evgeniy.shumilov@gmail.com>
+
+cd `dirname "$0"`
+! [ -f "config.json" ] && echo "Can't read config file config.json" && exit 1 || config=`cat config.json` 
+
+gmp() { # Get mqtt parameter
+	p=`echo "$config" | jq ".MQTT.$1" -r`
+	[ "$p" != "null" ] && echo "$p"
+}
+
+MQTT_HOST=`gmp host`
+MQTT_PORT=`gmp port`
+MQTT_USER=`gmp user`
+MQTT_PASS=`gmp pass`
+MQTT_SUBS=`gmp subs`
+
+[ -z "$MQTT_HOST" ] && echo "MQTT host is not configured, using 127.0.0.1 by default" && MQTT_HOST=127.0.0.1
+[ -z "$MQTT_PORT" ] && echo "MQTT port is not configured, using 1883 by default" && MQTT_PORT=1883
+mqtt="-h $MQTT_HOST -p $MQTT_PORT"
+[ -n "$MQTT_USER" ] && mqtt="$mqtt -u $MQTT_USER"
+[ -n "$MQTT_PORT" ] && mqtt="$mqtt -P $MQTT_PASS"
+[ -z "$MQTT_SUBS" ] && MQTT_SUBS='#'
+ms="mosquitto_sub -v $mqtt -t $MQTT_SUBS"
+hostname=`hostname`
+keys=`echo "$config" | jq '.Metrics | to_entries[] | .key' -r`
+metrics=`echo "$config" | jq '.Metrics'`
+templates=`echo "$config" | jq '.Templates'`
+influxurl=`echo "$config" | jq '.InfluxDB.url' -r`
+[ -z "$keys" ] || [ "$keys" = "null" ] && echo "There is no keys for metrics config section" && exit 2
+[ -z "$templates" ] || [ "$templates" = "null" ] && echo "Templates config section is empty or not found" && exit 2 
+[ -z "$influxurl" ] || [ "$influxurl" = "null" ] && echo "InfluxDB url config parameter is empty or not found" && exit 2 
+
+tbvn() { # template by value name
+	tpl=`echo "$templates" | jq '.'"$1" -r`
+	[ "$tpl" != "null" ] && echo $tpl
+}
+
+$ms | while read -r line; do
+	topic="${line%% *}"
+	payload="${line##* }"
+	for k in $keys; do
+		if [ -n "$(echo "$topic" | grep "$k")" ]; then
+			echo "T: $(date +%F_%T) $topic"
+			#echo "P: $payload"
+			values=`echo "$metrics" | jq '."'"$k"'".values[]' -r`
+			tags="$(echo "$metrics" | jq '."'"$k"'".tags[] | "echo \"'"$topic"'\" | sed -rn '"'"'s#\(.mask)#\(.name) \\1#p'"'"'"' -r | sh)"
+			tags="$(echo "$tags"; echo "host $hostname"; echo "topic $topic")"
+			res=''
+			for v in $values; do
+				value=`echo "$payload" | jq '.'"$v"`
+				res="$(echo "$res"; tbvn "$v" | sed 's#%value%#'"$value"'#g')"
+			done
+			for tagname in `echo "$tags" | cut -d " " -f 1`; do
+				tagvalue=`echo "$tags" | sed '/^'"$tagname"' /!d;s#^[^ ]* ##'`
+				res=`echo "$res" | sed 's#%'"$tagname"'%#'"$tagvalue"'#g'`
+			done
+			echo curl -X POST "$influxurl" -d "$res"
+			break
+		fi
+	done
+done
+
