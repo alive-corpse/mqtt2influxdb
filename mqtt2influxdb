@@ -44,19 +44,34 @@ $ms | while read -r line; do
 		if [ -n "$(echo "$topic" | grep "$k")" ]; then
 			echo "T: $(date +%F_%T) $topic"
 			#echo "P: $payload"
-			values=`echo "$metrics" | jq '."'"$k"'".values[]' -r`
 			tags="$(echo "$metrics" | jq '."'"$k"'".tags[] | "echo \"'"$topic"'\" | sed -rn '"'"'s#\(.mask)#\(.name) \\1#p'"'"'"' -r | sh)"
 			tags="$(echo "$tags"; echo "host $hostname"; echo "topic $topic")"
 			res=''
-			for v in $values; do
-				value=`echo "$payload" | jq '.'"$v"`
-				res="$(echo "$res"; tbvn "$v" | sed 's#%value%#'"$value"'#g')"
-			done
-			for tagname in `echo "$tags" | cut -d " " -f 1`; do
-				tagvalue=`echo "$tags" | sed '/^'"$tagname"' /!d;s#^[^ ]* ##'`
-				res=`echo "$res" | sed 's#%'"$tagname"'%#'"$tagvalue"'#g'`
-			done
-			echo curl -X POST "$influxurl" -d "$res"
+            m=`echo "$metrics" | jq ".\"$k\""`
+            values=`echo "$m" | jq '.values' -r`
+            if [ "$values" != "null" ]; then
+                values="$(echo "$values" | jq '.[]' -r)"
+                ign=`echo "$m" | jq '.ignorenull[]' -r 2>/dev/null`
+                for v in $values; do
+                    value=`echo "$payload" | jq '.'"$v"`
+                    if [ "$value" = "null" ] && [ -n "$(echo "$ign" | grep '^'"$v"'$' )" ]; then
+                        echo "Ignoring null value for metric $v"
+                    else
+                        mval=`echo "$m" | jq ".mapping.$v.\"$value\""`
+                        [ "$mval" != "null" ] && value="$mval"
+                        res="$(echo "$res"; tbvn "$v" | sed 's#%value%#'"$value"'#g')"
+                    fi
+                done
+            else
+                mval=`echo "$m" | jq ".mapping.$v.\"$value\""`
+                [ "$mval" != "null" ] && value="$mval"
+                res="$(tbvn "$v" | sed 's#%value%#'"$value"'#g')"
+            fi
+            for tagname in `echo "$tags" | cut -d " " -f 1`; do
+                tagvalue=`echo "$tags" | sed '/^'"$tagname"' /!d;s#^[^ ]* ##'`
+                res=`echo "$res" | sed 's#%'"$tagname"'%#'"$tagvalue"'#g'`
+            done
+            [ -n "$res" ] && curl -X POST "$influxurl" -d "$res"
 			break
 		fi
 	done

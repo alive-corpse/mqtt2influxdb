@@ -12,6 +12,7 @@
         "humidity": "Humidity,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
         "pressure": "Pressure,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
         "occupancy": "Occupancy,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
+        "contact": "Contact,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
         "battery": "Battery,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
         "voltage": "Voltage,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%",
         "linkquality": "LinkQuality,zone=%room%,host=%host%,source=mqtt,topic=%topic% value=%value%"
@@ -27,7 +28,14 @@
         },
         "^zigbee2mqtt/.*_movement$": {
             "values": ["battery", "occupancy", "linkquality", "voltage"],
-            "tags": [{"name": "room", "mask": "^zigbee2mqtt/([a-z_]*)_movement$"}]
+            "tags": [{"name": "room", "mask": "^zigbee2mqtt/([a-z_]*)_movement$"}],
+            "mapping": {"occupancy":{"true": 1, "false": 0}}
+        },
+        "^zigbee2mqtt/.*_door$": {
+            "values": ["battery", "contact", "linkquality", "voltage", "battery_low"],
+            "tags": [{"name": "room", "mask": "^zigbee2mqtt/([a-z_]*)_door$"}],
+            "mapping": {"contact":{"true": 1, "false": 0}},
+            "ignorenull": ["voltage","battery_low"]
         }
     }
 }
